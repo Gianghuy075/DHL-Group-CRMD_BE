@@ -18,7 +18,14 @@ async function bootstrap(): Promise<void> {
 }
 
 export default async function handler(req: Request, res: Response): Promise<void> {
-  if (!ready) ready = bootstrap();
-  await ready;
+  try {
+    if (!ready) ready = bootstrap();
+    await ready;
+  } catch (err) {
+    // Reset so the next invocation retries a cold boot instead of reusing the
+    // rejected promise; rethrow so the real stack lands in Vercel's logs.
+    ready = null;
+    throw err;
+  }
   server(req, res);
 }
