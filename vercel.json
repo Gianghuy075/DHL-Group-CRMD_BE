@@ -1,7 +1,8 @@
 {
   "version": 2,
   "framework": null,
-  "buildCommand": "npm run build",
+  "buildCommand": "npm run build && mkdir -p public",
+  "outputDirectory": "public",
   "installCommand": "npm install",
   "functions": {
     "api/index.js": {
