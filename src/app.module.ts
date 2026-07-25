@@ -8,6 +8,9 @@ import { HealthModule } from './health/health.module';
 import { CustomersModule } from './customers/customers.module';
 import { KiosksModule } from './kiosks/kiosks.module';
 import { PaymentsModule } from './payments/payments.module';
+import { WalletModule } from './wallet/wallet.module';
+import { FacebookTasksModule } from './facebook-tasks/facebook-tasks.module';
+import { FacebookModule } from './facebook/facebook.module';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 
@@ -23,6 +26,9 @@ import { AppService } from './app.service';
     CustomersModule,
     KiosksModule,
     PaymentsModule,
+    WalletModule,
+    FacebookTasksModule,
+    FacebookModule,
   ],
   controllers: [AppController],
   providers: [AppService],
