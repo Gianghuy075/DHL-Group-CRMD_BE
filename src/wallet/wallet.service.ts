@@ -174,6 +174,66 @@ export class WalletService {
   }
 
   /**
+   * Cancels a still-pending deposit: voids the PayOS payment request and marks
+   * the local tx 'cancelled'. Called when the user closes/leaves the QR screen
+   * so no orphaned "Chờ thanh toán" order lingers on PayOS. Idempotent and never
+   * touches an already-completed deposit (that money was really received).
+   */
+  async cancelDeposit(customerId: string, orderCode: number) {
+    const tx = await this.txRepo.findOne({ where: { order_code: orderCode } });
+    if (!tx || tx.customer_id !== customerId) {
+      throw new NotFoundException('Không tìm thấy đơn nạp.');
+    }
+    if (tx.status === 'completed') {
+      return { cancelled: false, status: 'completed' };
+    }
+    const voided = await this.payos.cancelPaymentLink(
+      orderCode,
+      'Người dùng huỷ nạp ví',
+    );
+    if (tx.status !== 'cancelled') {
+      tx.status = 'cancelled';
+      await this.txRepo.save(tx);
+    }
+    return { cancelled: true, payosVoided: voided };
+  }
+
+  /**
+   * DEV ONLY: simulate a successful PayOS deposit without a real transfer.
+   * Creates a completed deposit tx and credits the wallet. Guarded by NODE_ENV
+   * at the controller so it can never run in production.
+   */
+  async devCredit(customerId: string, amount: number) {
+    const numericAmount = Number(amount);
+    if (isNaN(numericAmount) || numericAmount <= 0) {
+      throw new BadRequestException('Số tiền không hợp lệ.');
+    }
+    return this.dataSource.transaction(async (manager) => {
+      const customer = await manager.findOne(Customer, {
+        where: { id: customerId },
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (!customer) throw new NotFoundException('Không tìm thấy khách hàng.');
+
+      const orderCode = this.payos.generateOrderCode();
+      await manager.save(
+        manager.create(WalletTransaction, {
+          customer_id: customerId,
+          transaction_type: 'deposit',
+          amount: numericAmount,
+          order_code: orderCode,
+          payment_method: 'dev',
+          status: 'completed',
+          description: `[DEV] Nạp ví giả lập ${numericAmount.toLocaleString('vi-VN')} đ`,
+        }),
+      );
+      await manager.increment(Customer, { id: customerId }, 'wallet_balance', numericAmount);
+      const c = await manager.findOne(Customer, { where: { id: customerId } });
+      return { success: true, wallet_balance: Number(c?.wallet_balance ?? 0) };
+    });
+  }
+
+  /**
    * Deducts `amount` from a customer's wallet within an existing transaction.
    * Locks the row to prevent concurrent overspend. Throws if balance is short.
    */

@@ -11,6 +11,7 @@ import { PaymentsModule } from './payments/payments.module';
 import { WalletModule } from './wallet/wallet.module';
 import { FacebookTasksModule } from './facebook-tasks/facebook-tasks.module';
 import { FacebookModule } from './facebook/facebook.module';
+import { StaffModule } from './staff/staff.module';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 
@@ -29,6 +30,7 @@ import { AppService } from './app.service';
     WalletModule,
     FacebookTasksModule,
     FacebookModule,
+    StaffModule,
   ],
   controllers: [AppController],
   providers: [AppService],

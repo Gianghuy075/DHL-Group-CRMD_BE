@@ -146,6 +146,37 @@ export class PayosService {
   }
 
   /**
+   * Cancels a pending payment request on PayOS so an abandoned top-up doesn't
+   * linger as "Chờ thanh toán". Best-effort: returns false instead of throwing
+   * when PayOS rejects (e.g. the order is already paid or already cancelled).
+   */
+  async cancelPaymentLink(orderCode: number, reason: string): Promise<boolean> {
+    if (!this.clientId || !this.apiKey) return false;
+    try {
+      const res = await fetch(
+        `${this.endpoint}/payment-requests/${orderCode}/cancel`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-client-id': this.clientId,
+            'x-api-key': this.apiKey,
+          },
+          body: JSON.stringify({ cancellationReason: reason }),
+        },
+      );
+      const result = (await res.json()) as { code?: string; desc?: string };
+      if (res.ok && result.code === '00') return true;
+      this.logger.warn(
+        `cancelPaymentLink ${orderCode} rejected: ${result.desc || result.code}`,
+      );
+    } catch (err) {
+      this.logger.warn(`cancelPaymentLink failed for ${orderCode}: ${String(err)}`);
+    }
+    return false;
+  }
+
+  /**
    * Verifies a webhook body: HMAC-SHA256 over data fields sorted alphabetically
    * as `key=value&...` (null/undefined coerced to empty string).
    */

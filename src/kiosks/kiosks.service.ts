@@ -1,16 +1,71 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { DataSource, Repository } from 'typeorm';
 
 import { KiosksRepository } from './kiosks.repository';
 import { Kiosk } from './entities/kiosk.entity';
+import { BusinessType } from './entities/business-type.entity';
 import { ListKiosksQuery } from './dto/list-kiosks.query';
 import { CreateKioskDto } from './dto/create-kiosk.dto';
 import { UpdateKioskDto } from './dto/update-kiosk.dto';
+import { PurchaseKioskDto } from './dto/purchase-kiosk.dto';
+import { WalletService } from '../wallet/wallet.service';
 
 const DEFAULT_PAGE_SIZE = 20;
 
 @Injectable()
 export class KiosksService {
-  constructor(private readonly kiosks: KiosksRepository) {}
+  constructor(
+    private readonly kiosks: KiosksRepository,
+    private readonly dataSource: DataSource,
+    private readonly wallet: WalletService,
+    @InjectRepository(BusinessType)
+    private readonly businessTypeRepo: Repository<BusinessType>,
+  ) {}
+
+  /**
+   * A logged-in customer buys a kiosk package paid from their wallet balance.
+   * Debits the wallet and creates the kiosk atomically.
+   */
+  async purchaseFromWallet(customerId: string, dto: PurchaseKioskDto) {
+    const bt = await this.businessTypeRepo.findOne({ where: { id: dto.businessTypeId } });
+    if (!bt) throw new NotFoundException('Không tìm thấy gói dịch vụ.');
+
+    const pricePerMonth = Number(bt.price_per_month);
+    const total = pricePerMonth * dto.months;
+    if (total <= 0) {
+      throw new BadRequestException('Gói dịch vụ chưa có giá hợp lệ.');
+    }
+
+    const start = new Date();
+    const end = new Date(start);
+    end.setMonth(end.getMonth() + dto.months);
+    const toDate = (d: Date) => d.toISOString().slice(0, 10);
+
+    return this.dataSource.transaction(async (manager) => {
+      await this.wallet.debit(
+        manager,
+        customerId,
+        total,
+        `Mua gói kiosk "${bt.name ?? ''}" x${dto.months} tháng`,
+      );
+
+      const kiosk = await manager.save(
+        manager.create(Kiosk, {
+          customer_id: customerId,
+          business_type_id: bt.id,
+          facebook_name: dto.facebookName?.trim() || null,
+          facebook_link: dto.facebookLink?.trim() || null,
+          start_date: toDate(start),
+          end_date: toDate(end),
+          status: 'active',
+          total_paid: total,
+        }),
+      );
+
+      return { success: true, kiosk, totalPaid: total };
+    });
+  }
 
   async list(query: ListKiosksQuery): Promise<{ data: Kiosk[]; count: number }> {
     const [data, count] = await this.kiosks.findAndCount({

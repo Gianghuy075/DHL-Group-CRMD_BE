@@ -1,7 +1,9 @@
 import {
   Body,
   Controller,
+  ForbiddenException,
   Get,
+  HttpCode,
   Param,
   ParseIntPipe,
   Post,
@@ -9,6 +11,7 @@ import {
 
 import { WalletService } from './wallet.service';
 import { TopupDto } from './dto/topup.dto';
+import { DevCreditDto } from './dto/dev-credit.dto';
 import { PayosWebhookDto } from './dto/payos-webhook.dto';
 import { CurrentUser, AuthUser } from '../auth/current-user.decorator';
 import { Public } from '../auth/public.decorator';
@@ -57,8 +60,28 @@ export class WalletController {
     return this.wallet.confirmDeposit(user.id, orderCode);
   }
 
+  // Voids a pending deposit on PayOS when the user closes/leaves the QR screen.
+  @Post('cancel/:orderCode')
+  cancel(
+    @CurrentUser() user: AuthUser,
+    @Param('orderCode', ParseIntPipe) orderCode: number,
+  ) {
+    return this.wallet.cancelDeposit(user.id, orderCode);
+  }
+
+  // DEV ONLY: simulate a paid deposit (no real transfer). Blocked outside dev.
+  @Post('dev/credit')
+  devCredit(@CurrentUser() user: AuthUser, @Body() dto: DevCreditDto) {
+    if (process.env.NODE_ENV === 'production') {
+      throw new ForbiddenException('Chức năng chỉ dùng khi phát triển.');
+    }
+    return this.wallet.devCredit(user.id, dto.amount);
+  }
+
   // PayOS calls this server-to-server; no user token, verified by signature.
+  // PayOS's webhook verifier expects an exact 200 (Nest defaults POST to 201).
   @Public()
+  @HttpCode(200)
   @Post('payos-webhook')
   webhook(@Body() body: PayosWebhookDto) {
     return this.wallet.handleWebhook(body);

@@ -1,4 +1,10 @@
-import { Column, Entity, PrimaryGeneratedColumn } from 'typeorm';
+import {
+  Column,
+  CreateDateColumn,
+  Entity,
+  PrimaryGeneratedColumn,
+  UpdateDateColumn,
+} from 'typeorm';
 
 // Maps DHL-Group-CRM.user_roles — links a Supabase auth user_id to an app role
 // ('admin' | 'reviewer' | 'user'). Used to authorize admin-only endpoints.
@@ -16,9 +22,19 @@ export class UserRole {
   @Column({ type: 'varchar', nullable: true })
   display_name: string | null;
 
+  // scrypt password hash ("scrypt$<saltHex>$<hashHex>"). Null for legacy rows.
+  @Column({ type: 'text', nullable: true })
+  password_hash: string | null;
+
   @Column({ type: 'varchar', default: 'user' })
   role: string;
 
   @Column({ type: 'boolean', default: true })
   is_active: boolean;
+
+  @CreateDateColumn({ type: 'timestamptz' })
+  created_at: Date;
+
+  @UpdateDateColumn({ type: 'timestamptz' })
+  updated_at: Date;
 }

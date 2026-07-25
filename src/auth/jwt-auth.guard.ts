@@ -5,36 +5,21 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
-import { ConfigService } from '@nestjs/config';
-import { createRemoteJWKSet, jwtVerify, JWTVerifyGetKey } from 'jose';
 
 import { IS_PUBLIC_KEY } from './public.decorator';
 import { AuthUser } from './current-user.decorator';
+import { JwtTokenService } from './jwt-token.service';
 
 /**
- * Verifies the Supabase-issued access token (ES256) locally against the
- * project's JWKS — no shared secret required. Attaches req.user on success.
+ * Verifies our self-issued HS256 JWT and attaches req.user. Routes marked
+ * @Public() skip verification.
  */
 @Injectable()
-export class SupabaseJwtGuard implements CanActivate {
-  private readonly jwks: JWTVerifyGetKey;
-  private readonly issuer: string;
-  private readonly audience: string;
-
+export class JwtAuthGuard implements CanActivate {
   constructor(
     private readonly reflector: Reflector,
-    config: ConfigService,
-  ) {
-    const supabaseUrl = (config.get<string>('SUPABASE_URL') ?? '').replace(/\/$/, '');
-    if (!supabaseUrl) {
-      throw new Error('SUPABASE_URL is not configured');
-    }
-    this.issuer = `${supabaseUrl}/auth/v1`;
-    this.audience = config.get<string>('SUPABASE_JWT_AUDIENCE', 'authenticated');
-    this.jwks = createRemoteJWKSet(
-      new URL(`${this.issuer}/.well-known/jwks.json`),
-    );
-  }
+    private readonly tokens: JwtTokenService,
+  ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const isPublic = this.reflector.getAllAndOverride<boolean>(IS_PUBLIC_KEY, [
@@ -53,14 +38,9 @@ export class SupabaseJwtGuard implements CanActivate {
 
     const token = header.slice('Bearer '.length).trim();
     try {
-      const { payload } = await jwtVerify(token, this.jwks, {
-        issuer: this.issuer,
-        audience: this.audience,
-        algorithms: ['ES256'],
-      });
+      const payload = await this.tokens.verify(token);
       request.user = {
         id: String(payload.sub),
-        email: payload.email as string | undefined,
         role: payload.role as string | undefined,
         claims: payload as Record<string, unknown>,
       };

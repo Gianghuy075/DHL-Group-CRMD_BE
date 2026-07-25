@@ -14,6 +14,8 @@ import { ListKiosksQuery } from './dto/list-kiosks.query';
 import { CreateKioskDto } from './dto/create-kiosk.dto';
 import { UpdateKioskDto } from './dto/update-kiosk.dto';
 import { SetStatusDto } from './dto/set-status.dto';
+import { PurchaseKioskDto } from './dto/purchase-kiosk.dto';
+import { CurrentUser, AuthUser } from '../auth/current-user.decorator';
 
 @Controller('kiosks')
 export class KiosksController {
@@ -22,6 +24,12 @@ export class KiosksController {
   @Get()
   list(@Query() query: ListKiosksQuery) {
     return this.kiosksService.list(query);
+  }
+
+  // Logged-in customer buys a kiosk package paid from their wallet.
+  @Post('purchase')
+  purchase(@CurrentUser() user: AuthUser, @Body() dto: PurchaseKioskDto) {
+    return this.kiosksService.purchaseFromWallet(user.id, dto);
   }
 
   // Declared before ':id' so the static prefix wins the route match.
